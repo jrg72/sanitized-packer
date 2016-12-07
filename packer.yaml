@@ -12,6 +12,11 @@ variables: ## referenced with {{ user `…` }}
     distro: centos
     distro_version: "7.2"
 
+    chef_dir: "/tmp/packer-chef-client"
+#    chef_env: "dev"
+    cookbook_path: "cookbooks/"
+    vendor_cookbook_path: "vendor/cookbooks/"
+
     ## must be provided with -var
     source_ami: null
     git_sha: null
@@ -270,8 +275,30 @@ provisioners:
     -   type: shell
         inline: rm -f /tmp/packer-skel.tgz
 
-    -   type: chef-solo
-        cookbook_paths: ["cookbooks", "vendor/cookbooks"]
+#    -   type: chef-solo
+#        cookbook_paths: ["cookbooks", "vendor/cookbooks"]
+#        run_list: ["recipe[selinux::disabled]", '{{ user `recipes` }}']
+
+    -   type: shell
+        inline: sudo mkdir -p /etc/chef && sudo chmod 777 /etc/chef
+
+    -   type: shell
+        inline: sudo mkdir -p /tmp/packer-chef-client && sudo chmod 777 /tmp/packer-chef-client
+
+    -   type: file
+        source: "{{user `cookbook_path`}}"
+        destination: "{{user `chef_dir`}}/cookbooks"
+
+    -   type: file
+        source: "{{user `vendor_cookbook_path`}}"
+        destination: "{{user `chef_dir`}}/cookbooks"
+
+    -   type: chef-client
+        execute_command: "cd /etc/chef && sudo chef-client --local-mode -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
+        server_url: "http://localhost:8889"
+        config_template: "templates/client.rb.template"
+        skip_clean_node: "true"
+        skip_clean_client: "true"
         run_list: ["recipe[selinux::disabled]", '{{ user `recipes` }}']
 
     -   type: shell-local

@@ -79,6 +79,4 @@ chmod 555 /usr/local/bin/consul /usr/local/bin/consul-template /usr/local/bin/en
 
 systemctl enable consul-join.service
 systemctl enable consul-leave.service
-systemctl enable consul-template.service
 systemctl enable consul.service
-systemctl enable vault-template.service
