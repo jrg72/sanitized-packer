@@ -1,0 +1,22 @@
+# -*- ini -*-
+
+[Unit]
+Description=consul-join
+
+## this should re-run if consul restarts
+Requires=consul.service
+After=consul.service
+
+[Service]
+User=consul
+TimeoutStartSec=0
+
+# default; may be overridden by a drop-in
+Environment="JOIN_METHOD=srv"
+
+ExecStart=/usr/local/bin/consul-join.sh ${JOIN_METHOD}
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

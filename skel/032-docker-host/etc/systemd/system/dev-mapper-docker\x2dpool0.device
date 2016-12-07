@@ -1,0 +1,13 @@
+# -*- ini -*-
+
+[Unit]
+Description=thin pool device for docker 
+
+Requisite=dev-xvdf.device
+
+Requires=docker-storage-pool.service
+After=docker-storage-pool.service
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,12 @@
+# -*- ini -*-
+
+[Unit]
+Description=gocd-agent
+
+[Service]
+User=go
+Restart=always
+RestartSec=10s
+ExecStart=/usr/share/go-agent/agent.sh
+
+## no [Install] section; will be (re)started by consul-template

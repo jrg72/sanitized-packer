@@ -1,0 +1,2 @@
+Defaults:go !requiretty
+go ALL=(ALL) NOPASSWD:ALL

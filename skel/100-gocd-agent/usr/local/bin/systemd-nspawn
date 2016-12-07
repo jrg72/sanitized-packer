@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+## this is a total hack.  acbuild needs systemd-nspawn.  initially, I tried
+## running the go agent in a rkt container, but failed for reasons I forget
+## right now (overlayfs problems?).  then I ran into more problems with systemd-
+## nspawn on CentOS 7.1, and I forget the origin.  we're getting closer: in
+## CentOS 7.2 I'm able to run acbuild as root outside of a container.  but when
+## running within the go agent, systemd-nspawn is killed for no discernable
+## reason.  so, we're back to faking out acbuild by providing this systemd-
+## nspawn-alike.
+
+## https://github.com/appc/acbuild/issues/162
+
+set -e -u -o pipefail
+
+export PATH=$PATH:/usr/sbin
+
+# systemd-nspawn \
+#     -D .acbuild/target \
+#     --register=no \
+#     --setenv PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+#     /usr/bin/yum install -y java-1.8.0-openjdk-headless.x86_64
+
+declare acbuild_PATH="${PATH}"
+declare rootfs
+
+keep_parsing=1
+while [ $keep_parsing -eq 1 ]; do
+    case "${1}" in 
+        ## -D .acbuild/target
+        -D )
+            rootfs="$( readlink -f -n "${2}" )"
+            shift 2
+            ;;
+        
+        ## --register=no
+        --register=* )
+            shift
+            ;;
+        
+        ## --quiet
+        --quiet )
+            shift
+            ;;
+        
+        ## --setenv PATH=…
+        --setenv )
+            acbuild_PATH="${2}"
+            shift 2
+            ;;
+
+        * )
+            keep_parsing=0
+            ;;
+        
+    esac
+done
+
+cmd=( "$@" )
+
+## centos7 has /bin as a symlink to /usr/bin; centos6 does not.  I *think* the
+## canonical path for these is /bin…
+chrooted_mount="/bin/mount"
+chrooted_umount="/bin/umount"
+
+function unmount() {
+    EXIT=$?
+    
+    set +e
+    rm -f "${rootfs}/etc/resolv.conf"
+    chroot "${rootfs}" ${chrooted_umount} /tmp
+
+    [ -d "${rootfs}/run" ] && chroot "${rootfs}" ${chrooted_umount} /run
+
+    ## must be last!
+    chroot "${rootfs}" ${chrooted_umount} /proc
+    
+    exit $EXIT
+}
+
+trap unmount EXIT
+
+chroot "${rootfs}" ${chrooted_mount} -t proc proc /proc
+
+if [ -e "${rootfs}/run" ]; then
+    chroot "${rootfs}" ${chrooted_mount} -t tmpfs tmpfs /run
+fi
+
+chroot "${rootfs}" ${chrooted_mount} -t tmpfs tmpfs /tmp
+
+cp /etc/resolv.conf "${rootfs}/etc/"
+
+rc=0
+/usr/bin/env "PATH=${acbuild_PATH}" /usr/sbin/chroot "${rootfs}" "${cmd[@]}" || rc=$?
+if [ $rc -ne 0 ]; then
+    echo "'${cmd[*]}' failed: ${rc}"
+fi
+
+exit $rc

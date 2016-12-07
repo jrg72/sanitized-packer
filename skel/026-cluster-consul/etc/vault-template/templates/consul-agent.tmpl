@@ -1,0 +1,9 @@
+{
+    {{ with secret "consul/creds/consul-agent" }}
+    "acl_token": "{{ .Data.token }}",
+    {{ end }}
+    
+    {{ with secret "secret/consul/gossip-key" }}
+    "encrypt": "{{ .Data.key }}"
+    {{ end }}
+}

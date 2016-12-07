@@ -1,0 +1,17 @@
+#!/bin/bash
+
+interface=${1}
+
+[ -f "/etc/sysconfig/network-scripts/ifcfg-${interface}" ] && \
+    . "/etc/sysconfig/network-scripts/ifcfg-${interface}"
+
+if [ -n "${RES_OPTIONS}" ]; then
+    ## RES_OPTIONS is set
+    
+    optline="options ${RES_OPTIONS}"
+    
+    if ! egrep -q "^${optline}\$" /etc/resolv.conf ; then
+        echo "${optline}" >> /etc/resolv.conf
+    fi
+fi
+    

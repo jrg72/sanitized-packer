@@ -1,0 +1,26 @@
+AGENT_WORK_DIR="/var/lib/go-agent"
+PID_FILE="/var/run/go-agent/go-agent.pid"
+VNC="N"
+DAEMON="N"
+
+JAVA_HOME="/etc/alternatives/jre"
+
+{{ with $servers := service "gocd-server" }}
+{{ if gt (len $servers) 0 }}
+{{ with index $servers 0 }}
+GO_SERVER="{{ .Address }}"
+GO_SERVER_PORT="{{ .Port }}"
+{{ end }}{{ end }}{{ end }}
+
+{{/* export vault config to the agent */}}
+{{ with $v := file "/var/lib/centralbooking/instance_token.json" | parseJSON }}
+VAULT_TOKEN="{{ $v.auth.client_token }}"
+export VAULT_TOKEN
+{{ end }}
+
+{{ with $v := file "/var/lib/centralbooking/vault_endpoint.json" | parseJSON }}
+VAULT_ADDR="{{ $v.vault_endpoint }}"
+export VAULT_ADDR
+{{ end }}
+
+{{ file "/etc/default/go-agent.cloud-init" }}

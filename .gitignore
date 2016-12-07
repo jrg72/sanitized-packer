@@ -1,0 +1,9 @@
+packer_cache/
+*.box
+console-*.out
+output-*/
+.vagrant/
+packer*.json
+skel/*.tgz
+work/
+vendor/

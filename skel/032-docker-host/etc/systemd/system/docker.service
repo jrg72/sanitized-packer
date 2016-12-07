@@ -1,0 +1,31 @@
+# -*- ini -*-
+
+## override docker-engine-provided service unit with our own that contains
+## storage config
+
+[Unit]
+Description=Docker Application Container Engine
+Documentation=https://docs.docker.com
+
+# requiring docker-storage-pool.service instead of dev-mapper-
+# docker\x2dpool0.device because the device is created but then
+# converted, so the presence of the device isn't sufficient
+After=network.target docker.socket docker-storage-pool.service
+Requires=docker.socket docker-storage-pool.service
+
+[Service]
+ExecStart=/usr/bin/docker \
+    -d \
+    -H fd:// \
+    --storage-driver=devicemapper \
+    --storage-opt dm.thinpooldev=/dev/mapper/docker-pool0 \
+    --storage-opt dm.basesize=50G \
+    --insecure-registry docker-registry.service.consul:5000
+
+MountFlags=slave
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target

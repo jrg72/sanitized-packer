@@ -1,0 +1,279 @@
+variables: ## referenced with {{ user `…` }}
+    ## reasonable defaults
+    instance_type: c4.large ## m1.small is too freaking small
+    subnet_id: 'subnet-0b927637' # public b
+
+    ## taken from the environment
+    #aws_access_key: '{{ env `AWS_ACCESS_KEY` }}'
+    #aws_secret_key: '{{ env `AWS_SECRET_KEY` }}'
+    aws_region: us-east-1
+    local_user: '{{ env `USER` }}'
+
+    distro: centos
+    distro_version: "7.2"
+
+    ## must be provided with -var
+    source_ami: null
+    git_sha: null
+    recipes: null
+    root_passwd: C1gRtmB33wQH9BvtzWT6hQAkaj+9dEEgg6ypIbFd6E/fod6f
+
+    #    ami_regions:
+    #      - us-west-1
+    #      - us-west-2
+    #      - eu-west-1
+
+builders:
+    ## consul, etcd2
+    -   &ami-cluster-base
+        name: ami-cluster-base
+        ## https://www.packer.io/docs/builders/amazon-ebs.html
+        type: amazon-ebs
+
+        #access_key: '{{ user `aws_access_key` }}'
+        #secret_key: '{{ user `aws_secret_key` }}'
+        region: '{{ user `aws_region` }}'
+        source_ami: '{{ user `source_ami` }}'
+        instance_type: '{{ user `instance_type` }}'
+        ssh_username: centos
+        ssh_timeout: 10m
+        ssh_pty: true
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - cluster-base'
+        ami_virtualization_type: hvm
+        ami_users: ## array of strings
+            - "651435385715"
+
+        ## used to tag the instance Packer launches for building the AMIs
+        run_tags:
+            creator: '{{ user `local_user` }}'
+            delete_me: yep
+
+        tags: &ami_tags
+            distro:         '{{ user `distro` }}'
+            version:        '{{ user `distro_version` }}'
+            git_sha:        '{{ user `git_sha` }}'
+            isotime:        '{{ isotime }}'
+            timestamp:      '{{ timestamp }}'
+            creator:        '{{ user `local_user` }}'
+            source_ami:     '{{ user `source_ami` }}'
+            source_region:  '{{ user `aws_region` }}'
+            packer_builder: '{{ build_name }}'
+
+        ami_block_device_mappings:
+            -   device_name: /dev/xvda
+                volume_size: 10
+                delete_on_termination: true
+
+        security_group_ids:
+            - sg-74e2590e # default VPC
+            - sg-5fe25925 # allow SSH
+
+        subnet_id: '{{ user `subnet_id` }}'
+        associate_public_ip_address: true
+
+    -   &vbox-cluster-base
+        name: vbox-cluster-base
+        type: virtualbox-iso
+
+        headless: true
+
+        iso_url: http://www.gtlib.gatech.edu/pub/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1511.iso
+        iso_checksum: 88c0437f0a14c6e2c94426df9d43cd67
+        iso_checksum_type: md5
+
+        http_directory: kickstart
+
+        boot_wait: 10s
+        boot_command:
+            ## quoting/escaping of the LABEL is critical.  it's literally
+            ## "CentOS 07 x86_64", but that needs to be a single argument to
+            ## inst.stage2.
+            ## https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Installation_Guide/chap-anaconda-boot-options.html
+            ## net.ifnames=0 disables (consistent) "predictable network interface names"
+            ## https://access.redhat.com/discussions/916973
+            ## @todo pass root password as boot param
+            - '<esc> vmlinuz initrd=initrd.img inst.stage2=hd:LABEL=CentOS\x207\x20x86_64 inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/virtualbox.cfg inst.headless inst.cmdline noshell inst.loglevel=debug net.ifnames=0 console=ttyS0,115200 console=tty0<enter><wait>'
+
+        disk_size: 10240
+
+        guest_additions_path: 'VBoxGuestAdditions_{{ .Version }}.iso'
+        guest_os_type: RedHat_64
+
+        shutdown_command: /sbin/halt -p
+
+        ssh_username: root
+        ssh_password: '{{user `root_passwd`}}'
+        ssh_wait_timeout: 30m
+
+        virtualbox_version_file: .vbox_version
+
+        ## UNCOMMENT BELOW IF YOU NEED TO DEBUG THE IMAGE BUILDING STEP IN VIRTUALBOX
+        ## https://www.virtualbox.org/wiki/Serial_redirect
+        # vboxmanage:
+        #     - [ "modifyvm", "{{ .Name }}", "--uart1", "0x3F8", "4" ]
+        #     - [ "modifyvm", "{{ .Name }}", "--uartmode1", "file", "{{ pwd }}/console-packer.out" ]
+
+    -   <<: *ami-cluster-base
+        name: ami-container-host
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - container-host'
+
+    -   <<: *ami-cluster-base
+        name: ami-gocd-server
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - gocd-server'
+
+    -   <<: *ami-cluster-base
+        name: ami-gocd-agent
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - gocd-agent'
+
+
+    -   <<: *ami-cluster-base
+        name: ami-nomad-server
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - nomad-server'
+
+    -   <<: *vbox-cluster-base
+        name: vbox-container-host
+
+    ## making the choice to make the vault servers AMIs instead of containers.
+    ## like the consul servers, they need to be super stable.  vault servers
+    ## will actually require operator intervention to unseal them when they're
+    ## restarted.
+    -   <<: *ami-cluster-base
+        name: ami-vault-server
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - vault-server'
+
+    -   <<: *vbox-cluster-base
+        name: vbox-vault-server
+
+    -   <<: *vbox-cluster-base
+        name: vbox-gocd-agent
+
+    ## images with kernel-ml from elrepo
+    -   <<: *ami-cluster-base
+        name: ami-container-host-mlkernel
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - container-host-mlkernel'
+
+    -   <<: *vbox-cluster-base
+        name: vbox-container-host-mlkernel
+
+    -   <<: *ami-cluster-base
+        name: ami-gocd-agent-mlkernel
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - gocd-agent-mlkernel'
+
+    -   <<: *vbox-cluster-base
+        name: vbox-gocd-agent-mlkernel
+
+post-processors:
+    -   type: vagrant
+        output: '{{ .BuildName }}_{{ user `git_sha` }}.box'
+        only:
+            - vbox-cluster-base
+            - vbox-vault-server
+
+            - vbox-container-host
+            - vbox-container-host-mlkernel
+            - vbox-gocd-agent
+            - vbox-gocd-agent-mlkernel
+
+provisioners:
+    ## while you can use 'only' and 'exclude' properties to select when provisioners
+    ## are run, it's easier to use the PACKER_BUILDER_TYPE and PACKER_BUILD_NAME
+    ## env vars in shell scripts to determine if they should be run.  This
+    ## allows for build names with patterns, like "ami-".
+
+    ## package up skel dir so it can be uploaded to the target (next step)
+    ## much easier than a boatload of heredocs
+    -   type: shell-local
+        command: >
+            cd {{ template_dir }}/skel/ ;
+            find . -type f |
+            tar -cz
+            -f {{ template_dir }}/work/skel-{{ build_name }}.tgz
+            -T -
+
+    ## these have to exist or validation will fail. :-(
+    ## so I've checked in zero-length files with these names :-( :-( :-(
+    -   type: file
+        source: "{{ template_dir }}/work/skel-{{ build_name }}.tgz"
+        destination: /tmp/packer-skel.tgz
+
+    ## this shell block is really only to specify defaults for others.
+    ## copy/pasting the execute_command everwhere is crazy trouble-prone.
+    -   &shell_default
+        type: shell
+        execute_command: 'chmod +x {{ .Path }}; {{ .Vars }} sudo -E {{ .Path }} && rm -f {{ .Path }}'
+        scripts:
+            - scripts/000-dump_env.sh
+
+    ## the mlkernel variants; setup required before 
+    -   <<: *shell_default
+        only:
+            - ami-container-host-mlkernel
+            - vbox-container-host-mlkernel
+            - ami-gocd-agent-mlkernel
+            - vbox-gocd-agent-mlkernel
+        scripts:
+            - scripts/007-install-mainline-kernel.sh
+
+    ## ALSO applies to *all* builders
+    -   <<: *shell_default
+        scripts:
+            - scripts/006-import-gpg-keys.sh
+            - scripts/025-update.sh
+            - scripts/025-cloud-init.sh
+
+    ## container host (gocd-agent needs these, too)
+    -   <<: *shell_default
+        only:
+            - ami-container-host
+            - ami-container-host-mlkernel
+            - vbox-container-host
+            - vbox-container-host-mlkernel
+            - ami-gocd-agent-mlkernel
+            - ami-gocd-agent
+            - vbox-gocd-agent
+            - vbox-gocd-agent-mlkernel
+        scripts:
+            - scripts/032-docker-host.sh
+            - scripts/026-cluster-consul.sh
+
+    ## vault server
+    -   <<: *shell_default
+        only:
+            - ami-vault-server
+            - vbox-vault-server
+        scripts:
+            - scripts/034-vault-server.sh
+
+    ## nomad server
+    -   <<: *shell_default
+        only:
+            - ami-nomad-server
+        scripts:
+            - scripts/035-nomad.sh
+
+    ## gocd agent
+    -   <<: *shell_default
+        only:
+            - ami-gocd-agent-mlkernel
+            - vbox-gocd-agent
+            - vbox-gocd-agent-mlkernel
+        scripts:
+            - scripts/100-gocd-agent.sh
+
+    -   <<: *shell_default
+        scripts:
+            - scripts/997-cleanup.sh
+            - scripts/998-zerodisk.sh
+            - scripts/999-lockdown.sh
+
+    ## delete skel tarball
+    -   type: shell
+        inline: rm -f /tmp/packer-skel.tgz
+
+    -   type: chef-solo
+        cookbook_paths: ["cookbooks", "vendor/cookbooks"]
+        run_list: ["recipe[selinux::disabled]", '{{ user `recipes` }}']
+
+    -   type: shell-local
+        command: >
+            rm -f {{ template_dir }}/work/skel-{{ build_name }}.tgz

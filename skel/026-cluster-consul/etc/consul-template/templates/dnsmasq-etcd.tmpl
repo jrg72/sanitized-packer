@@ -1,0 +1,31 @@
+{{/* -*- plain text -*-
+    @todo revisit this the next time etcd is upgraded
+    @todo doesn't this belong in 027-cluster-etcd?
+    
+    Workaround for broken consul large DNS replies.  Produces an SRV record in
+    the service.consul. domain that is equivalent to what Consul itself would
+    return.
+    
+    https://github.com/coreos/etcd/blob/v2.1.1/Documentation/clustering.md
+    _<service>._<protocol>.service[.datacenter][.domain]
+    so <service> needs to be etcd-server
+    buuuuut, it doesn't work when the targets in the SRV response are large
+
+    (these times 3):
+      _etcd-server._tcp.service.consul. 0 IN SRV 1 1 2379 ip-172-31-1-214.us-west-1.aws.hack1.bsdinternal.com.node.us-west-1_aws_hack1.consul.
+
+    etcd errors with
+      discovery: discovery: error querying DNS SRV records for _etcd-server lookup _etcd-server._tcp.service.consul. on 127.0.0.1:53: cannot unmarshal DNS message
+
+    https://github.com/golang/go/issues/11070
+    https://github.com/hashicorp/consul/issues/854
+    https://github.com/miekg/dns/issues/216
+    lots of finger-pointing, no resolution…
+
+    
+    http://www.thekelleys.org.uk/dnsmasq/docs/dnsmasq.conf.example
+    # The fields are <name>,<target>,<port>,<priority>,<weight>
+*/}}
+{{ range service "etcd-server" "any" }}
+# {{ .Node }}
+srv-host=_etcd-server._tcp.service.consul,{{ .Address }},{{ .Port }},1,1{{ end }}

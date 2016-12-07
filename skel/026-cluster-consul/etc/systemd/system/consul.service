@@ -1,0 +1,35 @@
+# -*- ini -*-
+
+[Unit]
+Description=consul
+Documentation=https://www.consul.io/
+
+## after cloud-final.service so 'systemd daemon-reload' happens before we're
+## started, to pick up the drop-ins created by cc_consul.
+Requires=cloud-final.service
+After=network.target cloud-final.service
+
+[Service]
+User=consul
+Restart=always
+RestartSec=10s
+
+## abort startup until credentials are written; may come from cloud-init or
+## vault (via consul-template)
+## @todo use AssertPathExists (Unit section) when our systemd supports it
+## v218? https://github.com/systemd/systemd/commit/59fccdc587bc179c1638916ee16a24099f94f81f
+ExecStartPre=/usr/bin/test -e /etc/consul.d/creds.json
+
+ExecStart=/usr/local/bin/consul agent -syslog -pid-file=/var/run/consul/server.pid -data-dir=/var/lib/consul -config-file=/etc/consul.conf -config-dir=/etc/consul.d
+
+# discard stdout as we're using syslog
+StandardOutput=null
+
+# don't allow the oom-killer to touch this process
+OOMScoreAdjust=-1000
+
+# 10k limit on number of open files
+LimitNOFILE=10240
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# -*- ini -*-
+
+## gracefully leave the consul cluster when the instance shuts down or reboots.
+## implemented as a separate systemd service so that we can restart
+## consul.service without disrupting cluster membership.
+
+[Unit]
+Description=consul-leave
+
+Wants=consul.service
+After=consul.service
+
+[Service]
+User=consul
+
+Type=oneshot
+RemainAfterExit=true
+
+ExecStart=/bin/true
+ExecStop=/usr/local/bin/consul leave
+
+[Install]
+WantedBy=multi-user.target

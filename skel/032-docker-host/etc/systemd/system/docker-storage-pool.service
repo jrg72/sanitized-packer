@@ -1,0 +1,36 @@
+# -*- ini -*-
+
+## sets up the docker storage pool once and only once.  /dev/xvdf must be an EBS
+## volume attached to the instance.
+## https://gist.github.com/therealromster/c79bc7e875ec07aa7146
+
+[Unit]
+Description=set up thin pool device for docker
+
+Before=dev-mapper-docker\x2dpool0.device
+
+After=dev-xvdf.device
+Requisite=dev-xvdf.device
+
+## run commands to set up LV exactly once
+# ConditionFirstBoot=true not supported until systemd 216
+ConditionPathExists=!/dev/mapper/docker-pool0
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+## ostensibly these commands should be broken out into separate services to
+## manage the pv, vg and then lv.
+
+ExecStart=/sbin/pvcreate /dev/xvdf
+ExecStart=/sbin/vgcreate docker /dev/xvdf
+
+## these numbers are a bit fuzzy; can't make the meta lv 10% because the
+## lvconvert step will fail for lack of free extents
+ExecStart=/sbin/lvcreate -y -n pool0meta -l 5%VG docker
+ExecStart=/sbin/lvcreate -y -n pool0 -l 90%VG docker
+ExecStart=/sbin/lvconvert -y --type thin-pool --poolmetadata docker/pool0meta docker/pool0
+
+[Install]
+WantedBy=multi-user.target
