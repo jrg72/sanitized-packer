@@ -130,6 +130,9 @@ builders:
         name: ami-gocd-agent
         ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - gocd-agent'
 
+    -   <<: *ami-cluster-base
+        name: ami-gocd-minion
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - gocd-minion'
 
     -   <<: *ami-cluster-base
         name: ami-nomad-server
@@ -219,7 +222,7 @@ provisioners:
         scripts:
             - scripts/007-install-mainline-kernel.sh
 
-    ## ALSO applies to *all* builders
+    ## ALSO applies to *all* builders ## 
     -   <<: *shell_default
         scripts:
             - scripts/006-import-gpg-keys.sh
@@ -235,11 +238,21 @@ provisioners:
             - vbox-container-host-mlkernel
             - ami-gocd-agent-mlkernel
             - ami-gocd-agent
+            - ami-gocd-server
             - vbox-gocd-agent
             - vbox-gocd-agent-mlkernel
         scripts:
             - scripts/032-docker-host.sh
             - scripts/026-cluster-consul.sh
+            - scripts/030-gocd-vagrant.sh
+
+    -   <<: *shell_default
+        only:
+            - ami-gocd-minion
+        scripts:
+            - scripts/032-docker-host.sh
+            - scripts/026-cluster-consul.sh
+            - scripts/031-gocd-minion.sh
 
     ## vault server
     -   <<: *shell_default

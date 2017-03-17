@@ -1,0 +1,2 @@
+Defaults:centos !requiretty
+centos ALL=(ALL) NOPASSWD:ALL
