@@ -14,14 +14,19 @@ variables: ## referenced with {{ user `…` }}
 
     chef_dir: "/tmp/packer-chef-client"
 #    chef_env: "dev"
-    cookbook_path: "cookbooks/"
-    vendor_cookbook_path: "vendor/cookbooks/"
+    cookbook_path: "cookbooks"
+    vendor_cookbook_path: "vendor/cookbooks"
+    data_bags_path: "data_bags"
+    environments_path: "environments"
 
     ## must be provided with -var
-    source_ami: null
+    source_ami: ""
+    vbox_image: ""
     git_sha: null
     recipes: null
-    root_passwd: C1gRtmB33wQH9BvtzWT6hQAkaj+9dEEgg6ypIbFd6E/fod6f
+    chef_env: ""
+    #root_passwd: C1gRtmB33wQH9BvtzWT6hQAkaj+9dEEgg6ypIbFd6E/fod6f
+    root_passwd: ""
 
     #    ami_regions:
     #      - us-west-1
@@ -70,21 +75,19 @@ builders:
                 delete_on_termination: true
 
         security_group_ids:
-            - sg-74e2590e # default VPC
-            - sg-5fe25925 # allow SSH
+            - sg-75ae190f # default VPC
+            - sg-56ae192c # allow SSH
 
         subnet_id: '{{ user `subnet_id` }}'
-        associate_public_ip_address: true
+        associate_public_ip_address: false
 
     -   &vbox-cluster-base
         name: vbox-cluster-base
-        type: virtualbox-iso
+        type: virtualbox-ovf
 
         headless: true
 
-        iso_url: http://www.gtlib.gatech.edu/pub/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1511.iso
-        iso_checksum: 88c0437f0a14c6e2c94426df9d43cd67
-        iso_checksum_type: md5
+        source_path: '{{ user `vbox_image` }}'
 
         http_directory: kickstart
 
@@ -99,15 +102,16 @@ builders:
             ## @todo pass root password as boot param
             - '<esc> vmlinuz initrd=initrd.img inst.stage2=hd:LABEL=CentOS\x207\x20x86_64 inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/virtualbox.cfg inst.headless inst.cmdline noshell inst.loglevel=debug net.ifnames=0 console=ttyS0,115200 console=tty0<enter><wait>'
 
-        disk_size: 10240
+        #disk_size: 10240
 
         guest_additions_path: 'VBoxGuestAdditions_{{ .Version }}.iso'
-        guest_os_type: RedHat_64
+        #guest_os_type: RedHat_64
 
-        shutdown_command: /sbin/halt -p
+        shutdown_command: "echo 'vagrant' | sudo -S systemctl poweroff"
 
-        ssh_username: root
-        ssh_password: '{{user `root_passwd`}}'
+
+        ssh_username: vagrant
+        ssh_password: vagrant
         ssh_wait_timeout: 30m
 
         virtualbox_version_file: .vbox_version
@@ -121,6 +125,10 @@ builders:
     -   <<: *ami-cluster-base
         name: ami-container-host
         ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - container-host'
+
+    -   <<: *ami-cluster-base
+        name: ami-plm-base
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - plm-base'
 
     -   <<: *ami-cluster-base
         name: ami-gocd-server
@@ -155,6 +163,9 @@ builders:
     -   <<: *vbox-cluster-base
         name: vbox-gocd-agent
 
+    -   <<: *vbox-cluster-base
+        name: vbox-plm-base
+
     ## images with kernel-ml from elrepo
     -   <<: *ami-cluster-base
         name: ami-container-host-mlkernel
@@ -176,6 +187,7 @@ post-processors:
         only:
             - vbox-cluster-base
             - vbox-vault-server
+            - vbox-plm-base
 
             - vbox-container-host
             - vbox-container-host-mlkernel
@@ -234,7 +246,6 @@ provisioners:
         only:
             - ami-container-host
             - ami-container-host-mlkernel
-            - vbox-container-host
             - vbox-container-host-mlkernel
             - ami-gocd-agent-mlkernel
             - ami-gocd-agent
@@ -244,6 +255,7 @@ provisioners:
         scripts:
             - scripts/032-docker-host.sh
             - scripts/026-cluster-consul.sh
+            - scripts/028-devtools.sh
             - scripts/030-gocd-vagrant.sh
 
     -   <<: *shell_default
@@ -298,16 +310,40 @@ provisioners:
     -   type: shell
         inline: sudo mkdir -p /tmp/packer-chef-client && sudo chmod 777 /tmp/packer-chef-client
 
-    -   type: file
-        source: "{{user `cookbook_path`}}"
-        destination: "{{user `chef_dir`}}/cookbooks"
+    -   type: shell-local
+        command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/cookbooks.tar -C {{user `cookbook_path`}} .
+
+    -   type: shell-local
+        command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/vcookbooks.tar -C {{user `vendor_cookbook_path`}} .
 
     -   type: file
-        source: "{{user `vendor_cookbook_path`}}"
-        destination: "{{user `chef_dir`}}/cookbooks"
+        source: ./work/toupload/cookbooks
+        destination: "{{user `chef_dir`}}"
+
+    -   type: shell
+        inline:
+            - cd {{user `chef_dir`}}/cookbooks && tar xf cookbooks.tar
+            - cd {{user `chef_dir`}}/cookbooks && tar xf vcookbooks.tar
+            - rm cookbooks.tar vcookbooks.tar
+
+    -   type: file
+        source: ./data_bags
+        destination: "{{user `chef_dir`}}"
+
+    -   type: file
+        source: ./environments
+        destination: "{{user `chef_dir`}}"
+
+#    -   type: file
+#        source: "{{user `vendor_cookbook_path`}}"
+#        destination: "{{user `chef_dir`}}/cookbooks/"
+#        except:
+#            - ami-cluster-base
 
     -   type: chef-client
         execute_command: "cd /etc/chef && sudo chef-client --local-mode -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
+        install_command: "curl -L https://www.chef.io/chef/install.sh | \
+  {{if .Sudo}}sudo{{end}} bash -s -- -v 12.19.36"
         server_url: "http://localhost:8889"
         config_template: "templates/client.rb.template"
         skip_clean_node: "true"

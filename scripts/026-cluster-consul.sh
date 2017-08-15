@@ -27,7 +27,7 @@ systemctl enable dnsmasq.service
 
 ## create the consul user
 ## checks can't be executed if the shell's /sbin/nologin, as of CentOS 7.2
-useradd --home-dir /var/lib/consul --create-home --system --shell /bin/bash consul
+/sbin/useradd --home-dir /var/lib/consul --create-home --system --shell /bin/bash consul
 
 ## create consul config directory
 mkdir /etc/consul.d

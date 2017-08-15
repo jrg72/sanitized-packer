@@ -7,4 +7,5 @@ role_path         "{{user `chef_dir`}}/roles"
 data_bag_path     "{{user `chef_dir`}}/data_bags"
 environment_path  "{{user `chef_dir`}}/environments"
 cookbook_path     [ "{{user `chef_dir`}}/cookbooks" ]
+environment       "{{user `chef_env`}}"
 node_name         "packer-ami-build"

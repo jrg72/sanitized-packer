@@ -22,6 +22,6 @@ if [ -n "${old_kernel_pkg}" ] && [ "$( rpm -q kernel | wc -l )" -gt 1 ]; then
     rpm -e "${old_kernel_pkg}"
 
     echo "Running kernel ${old_kernel_pkg} not new kernel ${kernel_pkg} so rebooting"
-    reboot
+    systemctl reboot
     sleep 240
 fi

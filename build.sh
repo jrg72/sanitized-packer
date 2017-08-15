@@ -127,6 +127,7 @@ for cookbook in "${cookbooks[@]}"; do
     berks vendor --berksfile cookbooks/${item}/Berksfile "${basedir}/vendor/cookbooks/"
   done
 done
+berks vendor --berksfile cookbooks/chef-plm_base/Berksfile "${basedir}/vendor/cookbooks/"
 
 #echo ${cookbook}
 
