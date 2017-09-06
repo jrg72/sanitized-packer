@@ -70,6 +70,18 @@ if [[ ! "${packer_args[*]:-}" =~ -var\ git_sha= ]]; then
     packer_args+=( "-var" "git_sha=$( git describe --always --dirty )" )
 fi
 
+## provide chef selinux noop recipe if not specified
+if [[ ! "${packer_args[*]:-}" =~ -var\ recipes= ]]; then
+    packer_args+=( "-var" "recipes=chef-plm_base" )
+fi
+
+## provide chef role if not specified
+if [[ ! "${packer_args[*]:-}" =~ -var\ role= ]]; then
+    packer_args+=( "-var" "role=role[base]" )
+fi
+
+
+
 ## check to see if user passed a list of builders with -only=builder1,builderN
 builders=()
 for arg in "${packer_args[@]}"; do
@@ -107,6 +119,8 @@ for arg in "${packer_args[@]}"; do
     fi
 done
 
+#echo ${cookbooks}
+
 ## quick-n-dirty validation
 ## validate doesn't take -debug
 pv_args=( ${packer_args[@]} )
@@ -117,17 +131,17 @@ for i in "${!pv_args[@]}"; do
 done 
 packer-io validate "${pv_args[@]}" "${packer_json}"
 
-rm -rf "${basedir}/vendor/cookbooks/"
-mkdir -p "${basedir}/vendor/cookbooks/"
-#berks vendor "${basedir}/vendor/cookbooks/" --delete
-for cookbook in "${cookbooks[@]}"; do
-  for item in ${cookbook}; do
-    item=`echo ${item} | sed s/::.*// | sed s/\"//g`
-#    echo ${item}
-    berks vendor --berksfile cookbooks/${item}/Berksfile "${basedir}/vendor/cookbooks/"
-  done
-done
-berks vendor --berksfile cookbooks/chef-plm_base/Berksfile "${basedir}/vendor/cookbooks/"
+#rm -rf "${basedir}/vendor/cookbooks/"
+#mkdir -p "${basedir}/vendor/cookbooks/"
+##berks vendor "${basedir}/vendor/cookbooks/" --delete
+#for cookbook in "${cookbooks[@]}"; do
+#  for item in ${cookbook}; do
+#    item=`echo ${item} | sed s/::.*// | sed s/\"//g`
+##    echo ${item}
+#    berks vendor --berksfile cookbooks/${item}/Berksfile "${basedir}/vendor/cookbooks/"
+#  done
+#done
+#berks vendor --berksfile cookbooks/chef-plm_base/Berksfile "${basedir}/vendor/cookbooks/"
 
 #echo ${cookbook}
 

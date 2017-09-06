@@ -2,17 +2,18 @@
 driver:
   name: ec2
   aws_ssh_key_id: gocd.ops
-  security_group_ids: ["sg-9c4382e0","sg-5fe25925"]
+  security_group_ids: ["sg-9529cdea","sg-56ae192c"]
   region: us-east-1
   availability_zone: b
   require_chef_omnibus: true
-  subnet_id: subnet-04927638
+  subnet_id: subnet-1c203b21
   instance_type: c4.large
   associate_public_ip: false
   tags:
     Name: ops-go-minion
     go-agent: minion
-  image_id: ami-1876800e
+  image_id: ami-6b57df7d
+  user_data: /var/go/.kitchen/user-data.sh
 
 transport:
   ssh_key: /var/go/.ssh/gocd_rsa

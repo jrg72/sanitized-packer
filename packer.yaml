@@ -13,8 +13,10 @@ variables: ## referenced with {{ user `…` }}
     distro_version: "7.2"
 
     chef_dir: "/tmp/packer-chef-client"
+    #chef_dir: "/etc/chef"
 #    chef_env: "dev"
     cookbook_path: "cookbooks"
+    policy_path: 'exported-policies'
     vendor_cookbook_path: "vendor/cookbooks"
     data_bags_path: "data_bags"
     environments_path: "environments"
@@ -23,7 +25,9 @@ variables: ## referenced with {{ user `…` }}
     source_ami: ""
     vbox_image: ""
     git_sha: null
-    recipes: null
+    chef_policy: null
+    #recipes: null
+    #    role: null
     chef_env: ""
     #root_passwd: C1gRtmB33wQH9BvtzWT6hQAkaj+9dEEgg6ypIbFd6E/fod6f
     root_passwd: ""
@@ -129,6 +133,10 @@ builders:
     -   <<: *ami-cluster-base
         name: ami-plm-base
         ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - plm-base'
+
+    -   <<: *ami-cluster-base
+        name: ami-plm-web-stage
+        ami_name: 'PLM {{ user `distro` }} {{ user `distro_version` }} {{ user `git_sha` }}/{{ timestamp }} - plm-web-stage'
 
     -   <<: *ami-cluster-base
         name: ami-gocd-server
@@ -240,6 +248,8 @@ provisioners:
             - scripts/006-import-gpg-keys.sh
             - scripts/025-update.sh
             - scripts/025-cloud-init.sh
+        except:
+            - ami-plm-web-stage
 
     ## container host (gocd-agent needs these, too)
     -   <<: *shell_default
@@ -295,6 +305,8 @@ provisioners:
             - scripts/997-cleanup.sh
             - scripts/998-zerodisk.sh
             - scripts/999-lockdown.sh
+        except:
+            - ami-plm-web-stage
 
     ## delete skel tarball
     -   type: shell
@@ -310,28 +322,48 @@ provisioners:
     -   type: shell
         inline: sudo mkdir -p /tmp/packer-chef-client && sudo chmod 777 /tmp/packer-chef-client
 
-    -   type: shell-local
-        command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/cookbooks.tar -C {{user `cookbook_path`}} .
+        #-   type: shell-local
+        #command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/cookbooks.tar -C {{user `cookbook_path`}} .
 
     -   type: shell-local
-        command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/vcookbooks.tar -C {{user `vendor_cookbook_path`}} .
+        command: mkdir -p ./work/toupload/{{user `policy_path`}}; tar chf ./work/toupload/exported-policies/policyrepo.tar -C {{user `policy_path`}}/{{user `chef_policy` }} .
+
+        #-   type: shell-local
+        #command: mkdir -p ./work/toupload/cookbooks; tar chf ./work/toupload/cookbooks/vcookbooks.tar -C {{user `vendor_cookbook_path`}} .
+
+        #-   type: file
+        #source: ./work/toupload/cookbooks
+        #destination: "{{user `chef_dir`}}"
 
     -   type: file
-        source: ./work/toupload/cookbooks
+        source: ./work/toupload/{{user `policy_path`}}
         destination: "{{user `chef_dir`}}"
+
+        #-   type: shell
+        #inline:
+        #    - cd {{user `chef_dir`}}/cookbooks && tar xf cookbooks.tar
+        #    - cd {{user `chef_dir`}}/cookbooks && tar xf vcookbooks.tar
+        #    - rm cookbooks.tar vcookbooks.tar
 
     -   type: shell
         inline:
-            - cd {{user `chef_dir`}}/cookbooks && tar xf cookbooks.tar
-            - cd {{user `chef_dir`}}/cookbooks && tar xf vcookbooks.tar
-            - rm cookbooks.tar vcookbooks.tar
+            - cd {{user `chef_dir`}}/ && sudo tar xf {{user `policy_path`}}/policyrepo.tar
+            - sudo rm {{user `policy_path`}}/policyrepo.tar
 
     -   type: file
         source: ./data_bags
         destination: "{{user `chef_dir`}}"
 
+        #    -   type: file
+        #source: ./environments
+        #destination: "{{user `chef_dir`}}"
+
+        #    -   type: file
+        #source: ./roles
+        #destination: "{{user `chef_dir`}}"
+
     -   type: file
-        source: ./environments
+        source: ./nodes
         destination: "{{user `chef_dir`}}"
 
 #    -   type: file
@@ -340,15 +372,21 @@ provisioners:
 #        except:
 #            - ami-cluster-base
 
+        #-   type: shell
+        #inline:
+        #    - mkdir {{user `chef_dir`}}/nodes
+        #    - cd {{user `chef_dir`}}/ && echo '{ "chef_environment": "{{user `chef_env`}}" }' > ./nodes/packer-ami-build.json
+
     -   type: chef-client
-        execute_command: "cd /etc/chef && sudo chef-client --local-mode -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
+      #        execute_command: "cd /etc/chef && sudo chef-client --local-mode -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
+        execute_command: "cd {{user `chef_dir`}} && sudo chef-client -z -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
         install_command: "curl -L https://www.chef.io/chef/install.sh | \
-  {{if .Sudo}}sudo{{end}} bash -s -- -v 12.19.36"
+  {{if .Sudo}}sudo{{end}} bash -s -- -v 12.21.4"
         server_url: "http://localhost:8889"
         config_template: "templates/client.rb.template"
         skip_clean_node: "true"
         skip_clean_client: "true"
-        run_list: ["recipe[selinux::disabled]", '{{ user `recipes` }}']
+        #        run_list: ['{{ user `recipes` }}', '{{ user `role` }}']
 
     -   type: shell-local
         command: >
