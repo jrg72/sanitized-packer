@@ -4,7 +4,7 @@ local_mode        true
 chef_zero.enabled true
 ssl_verify_mode   "verify_peer"
 data_bag_path     "{{user `chef_dir`}}/data_bags"
-policy_name 'stagedash-policy'
+policy_name "{{user `chef_policy`}}"
 policy_group 'local'
 policy_document_native_api true
 use_policyfile    true

@@ -74,8 +74,15 @@ builders:
             packer_builder: '{{ build_name }}'
 
         ami_block_device_mappings:
-            -   device_name: /dev/xvda
+            -   device_name: /dev/sda1
                 volume_size: 10
+                volume_type: gp2
+                delete_on_termination: true
+
+        launch_block_device_mappings:
+            -   device_name: /dev/sda1
+                volume_size: 10
+                volume_type: gp2
                 delete_on_termination: true
 
         security_group_ids:
@@ -231,6 +238,7 @@ provisioners:
         execute_command: 'chmod +x {{ .Path }}; {{ .Vars }} sudo -E {{ .Path }} && rm -f {{ .Path }}'
         scripts:
             - scripts/000-dump_env.sh
+            - scripts/006-import-gpg-keys.sh
 
     ## the mlkernel variants; setup required before 
     -   <<: *shell_default
@@ -245,11 +253,10 @@ provisioners:
     ## ALSO applies to *all* builders ## 
     -   <<: *shell_default
         scripts:
-            - scripts/006-import-gpg-keys.sh
             - scripts/025-update.sh
             - scripts/025-cloud-init.sh
         except:
-            - ami-plm-web-stage
+            - ami-gocd-minion
 
     ## container host (gocd-agent needs these, too)
     -   <<: *shell_default
@@ -307,6 +314,7 @@ provisioners:
             - scripts/999-lockdown.sh
         except:
             - ami-plm-web-stage
+            - ami-gocd-minion
 
     ## delete skel tarball
     -   type: shell
@@ -372,10 +380,10 @@ provisioners:
 #        except:
 #            - ami-cluster-base
 
-        #-   type: shell
+        #    -   type: shell
         #inline:
-        #    - mkdir {{user `chef_dir`}}/nodes
-        #    - cd {{user `chef_dir`}}/ && echo '{ "chef_environment": "{{user `chef_env`}}" }' > ./nodes/packer-ami-build.json
+        #    - cd {{user `chef_dir`}}/ && echo '{ "chef_environment": "{{user `chef_env`}}" ' > ./nodes/packer-ami-build.json
+        #    - cd {{user `chef_dir`}}/ && echo ' "run_list": "{{user `recpies`}}" }' > ./nodes/packer-ami-build.json
 
     -   type: chef-client
       #        execute_command: "cd /etc/chef && sudo chef-client --local-mode -c /tmp/packer-chef-client/client.rb -j /tmp/packer-chef-client/first-boot.json"
@@ -386,6 +394,8 @@ provisioners:
         config_template: "templates/client.rb.template"
         skip_clean_node: "true"
         skip_clean_client: "true"
+        #except:
+        #     - ami-gocd-minion
         #        run_list: ['{{ user `recipes` }}', '{{ user `role` }}']
 
     -   type: shell-local

@@ -31,4 +31,4 @@ egrep '(_x86_64\.rpm)$' vagrant_${VAGRANT_VERSION}_SHA256SUMS | sha256sum -c
 
 rpm -ivh vagrant_${VAGRANT_VERSION}_x86_64.rpm
 
-/usr/local/rbenv/shims/gem install thor:'< 0.19.2' kitchen-ec2
+#/usr/local/rbenv/shims/gem install thor:'< 0.19.2' kitchen-ec2
